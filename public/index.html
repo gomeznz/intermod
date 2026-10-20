@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intermod — NZ harmonic &amp; IM calculator</title>
+<meta name="description" content="Harmonic and intermodulation calculator built on the NZ RSM PIB 23 mobile channel plans.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 26 L8 26 L10 6 L12 26 L15 26 L16 14 L17 26 L20 26 L22 6 L24 26 L30 26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>
+    <div><h1>Intermod</h1><p>Harmonic &amp; IM calculator · NZ RSM PIB 23</p></div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="source" aria-selected="true">Find source</button>
+    <button role="tab" data-tab="site">Check site</button>
+    <button role="tab" data-tab="clean">Clean channel</button>
+  </nav>
+</header>
+
+<main>
+  <aside class="panel" id="sitePanel">
+    <div class="panel-head">
+      <h2>Site</h2>
+      <select id="siteSelect" aria-label="Saved sites"></select>
+      <div class="menu">
+        <button class="ghost" id="siteMenuBtn" aria-haspopup="true" aria-label="Site options">⋯</button>
+        <div class="menu-list" id="siteMenu" hidden>
+          <button data-act="new">New site</button>
+          <button data-act="rename">Rename</button>
+          <button data-act="dup">Duplicate</button>
+          <button data-act="export">Export JSON</button>
+          <button data-act="import">Import JSON</button>
+          <button data-act="csv">Paste list (CSV)</button>
+          <button data-act="delete" class="danger">Delete site</button>
+        </div>
+      </div>
+    </div>
+
+    <form id="addForm" class="add" autocomplete="off">
+      <label class="grow">Add channel or frequency
+        <input id="addInput" list="chanList" placeholder="e.g. FN123, EN22#, 152.4875" inputmode="text">
+      </label>
+      <button type="submit">Add</button>
+    </form>
+    <p class="hint" id="addHint">Base channels add as Tx = base, Rx = its mobile pair. Type a plain MHz figure for a manual entry.</p>
+    <datalist id="chanList"></datalist>
+
+    <div class="stations" id="stations"></div>
+    <p class="empty" id="stationsEmpty">No transmitters or receivers yet. Add the channels on this site.</p>
+  </aside>
+
+  <section class="work">
+    <!-- FIND SOURCE -->
+    <div class="tabpane" data-pane="source">
+      <div class="card">
+        <h2>What's hitting this receiver?</h2>
+        <div class="row">
+          <label class="grow">Victim receive frequency
+            <input id="victimInput" list="chanList" placeholder="Channel (e.g. FN123#) or MHz">
+          </label>
+          <label class="narrow">Rx bandwidth (kHz)
+            <input id="victimBw" type="number" step="0.25" min="0" value="12.5">
+          </label>
+        </div>
+        <p class="hint" id="victimHint"></p>
+
+        <fieldset>
+          <legend>Look for sources among</legend>
+          <label class="check"><input type="checkbox" id="poolSite" checked> Transmitters on this site</label>
+          <label class="check"><input type="checkbox" id="poolDb"> PIB 23 channels</label>
+          <div id="dbPoolOpts" class="subopts" hidden>
+            <div class="chips" id="bandChips"></div>
+            <div class="row tight">
+              <label class="check"><input type="checkbox" id="roleB" checked> Base Tx</label>
+              <label class="check"><input type="checkbox" id="roleS" checked> Simplex</label>
+              <label class="check"><input type="checkbox" id="roleM"> Mobile Tx</label>
+              <span class="hint" id="poolCount"></span>
+            </div>
+            <label class="check" style="margin-top:8px"><input type="checkbox" id="requireSite" checked> Only combinations that include a site transmitter</label>
+          </div>
+        </fieldset>
+        <button class="primary" id="runSource">Find sources</button>
+      </div>
+      <div id="sourceOut"></div>
+    </div>
+
+    <!-- CHECK SITE -->
+    <div class="tabpane" data-pane="site" hidden>
+      <div class="card">
+        <h2>Check every receiver on the site</h2>
+        <p class="hint">Works out every harmonic and IM product from the site's transmitters and lists the ones that land on a site receiver.</p>
+        <button class="primary" id="runSite">Check site</button>
+      </div>
+      <div id="siteOut"></div>
+    </div>
+
+    <!-- CLEAN CHANNEL -->
+    <div class="tabpane" data-pane="clean" hidden>
+      <div class="card">
+        <h2>Find the cleanest channel to add</h2>
+        <div class="row">
+          <label class="grow">Band
+            <select id="cleanBand"></select>
+          </label>
+          <label class="grow">Channelling
+            <select id="cleanPlan"></select>
+          </label>
+        </div>
+        <label class="check"><input type="checkbox" id="cleanSkipUsed" checked> Skip channels already on the site</label>
+        <p class="hint" id="cleanCount"></p>
+        <button class="primary" id="runClean">Rank channels</button>
+      </div>
+      <div id="cleanOut"></div>
+    </div>
+
+    <details class="card settings" id="settings">
+      <summary>Calculation settings</summary>
+      <div class="grid">
+        <label>Harmonics up to
+          <input type="number" id="setHarm" min="2" max="20" value="10"></label>
+        <label>2-tone IM up to order
+          <input type="number" id="setO2" min="0" max="15" value="7"></label>
+        <label>3-tone IM up to order
+          <input type="number" id="setO3" min="0" max="9" value="5"></label>
+        <label>Guard band (kHz)
+          <input type="number" id="setGuard" min="0" step="0.5" value="0"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="setEven"> Include even-order mixing (A+B, A−B, 2A+2B …)</label>
+      <p class="hint">A product counts as a hit when its occupied bandwidth (Σ|coefficient| × carrier bandwidth) overlaps the receiver's bandwidth, widened by the guard band.</p>
+    </details>
+  </section>
+</main>
+
+<footer>
+  Channel data: RSM PIB 23 <i>Mobile Service Bands in New Zealand</i>, Issue 9.1 (April 2019). A channel being in a band plan doesn't mean it is licensed or available.
+</footer>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <h3 id="dlgTitle"></h3>
+    <div id="dlgBody"></div>
+    <menu><button value="cancel" class="ghost">Cancel</button><button value="ok" class="primary" id="dlgOk">OK</button></menu>
+  </form>
+</dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "intermod",
+  "version": "0.1.0",
+  "description": "Harmonic and intermodulation calculator built on NZ RSM PIB 23 channel plans",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js",
+    "build:data": "pdftotext -layout sources/pib-23-mobile-service-bands.pdf /tmp/pib23.txt && python3 tools/parse_pib23.py /tmp/pib23.txt data/channels.json"
+  }
+}
