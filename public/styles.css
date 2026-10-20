@@ -137,3 +137,6 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; ma
 dialog textarea { width: 100%; min-height: 180px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; font: .85rem var(--mono); padding: 8px; }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.st .mode { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--muted); margin-top: 4px; }
+.st .mode select { width: auto; flex: 0 1 auto; padding: 3px 6px; font-size: .8rem; }
+.st .mode input { width: 70px; padding: 3px 6px; font-size: .8rem; }

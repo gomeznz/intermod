@@ -62,8 +62,8 @@
           <label class="grow">Victim receive frequency
             <input id="victimInput" list="chanList" placeholder="Channel (e.g. FN123#) or MHz">
           </label>
-          <label class="narrow">Rx bandwidth (kHz)
-            <input id="victimBw" type="number" step="0.25" min="0" value="12.5">
+          <label class="narrow">Rx occupied bandwidth (kHz)
+            <input id="victimBw" type="number" step="0.1" min="0" value="11">
           </label>
         </div>
         <p class="hint" id="victimHint"></p>
@@ -130,7 +130,7 @@
           <input type="number" id="setGuard" min="0" step="0.5" value="0"></label>
       </div>
       <label class="check"><input type="checkbox" id="setEven"> Include even-order mixing (A+B, A−B, 2A+2B …)</label>
-      <p class="hint">A product counts as a hit when its occupied bandwidth (Σ|coefficient| × carrier bandwidth) overlaps the receiver's bandwidth, widened by the guard band.</p>
+      <p class="hint">A product counts as a hit when its occupied bandwidth (Σ|coefficient| × carrier occupied bandwidth) overlaps the receiver's bandwidth, widened by the guard band. Widths come from each entry's emission mode, not its channel spacing: 6.25 kHz channels default to NXDN (4K00F1E), 12.5 kHz to analogue FM (11K0F3E), 25 kHz to 16K0F3E. Change the mode per site entry.</p>
     </details>
   </section>
 </main>

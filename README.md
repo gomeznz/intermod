@@ -18,8 +18,13 @@ Products covered (orders set under *Calculation settings*):
 - 3-tone IM `aA ± bB ± cC` (default odd orders up to 5th: `A+B−C`, `2A−B−C`, …)
 - Even-order mixing (`A+B`, `A−B` …) optional
 
-A product is a **hit** when its occupied bandwidth (Σ|coefficient| × carrier bandwidth) overlaps
-the receiver's bandwidth, widened by an optional guard band. Results are ranked by order (lower is
+A product is a **hit** when its occupied bandwidth (Σ|coefficient| × carrier occupied bandwidth)
+overlaps the receiver's bandwidth, widened by an optional guard band.
+
+Widths come from each site entry's **emission mode**, not its channel spacing. Defaults by spacing:
+6.25 kHz → NXDN (4K00F1E, 4 kHz) since those channels are used for digital modes; 12.5 kHz →
+analogue FM (11K0F3E); 25 kHz → 16K0F3E. Per entry you can pick NXDN 12.5 (8K30F1E),
+DMR (7K60FXE), P25 Phase 1 (8K10F1E) or a custom width. Results are ranked by order (lower is
 stronger), then by how close they land.
 
 Sites are stored in the browser (localStorage) and can be exported/imported as JSON or pasted as a

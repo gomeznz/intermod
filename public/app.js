@@ -11,6 +11,23 @@ const store = {
 };
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+// ---------------- emission modes ----------------
+// Occupied bandwidth (kHz) from the emission designator. Channel spacing is not the signal width:
+// a 6.25 kHz NXDN carrier occupies ~4 kHz, a 12.5 kHz analogue FM carrier ~11 kHz.
+const MODES = {
+  fm25:   { label: "Analogue FM 25 kHz", em: "16K0F3E", occ: 16 },
+  fm12:   { label: "Analogue FM 12.5 kHz", em: "11K0F3E", occ: 11 },
+  nxdn6:  { label: "NXDN 6.25 kHz", em: "4K00F1E", occ: 4 },
+  nxdn12: { label: "NXDN 12.5 kHz", em: "8K30F1E", occ: 8.3 },
+  dmr:    { label: "DMR", em: "7K60FXE", occ: 7.6 },
+  p25:    { label: "P25 Phase 1", em: "8K10F1E", occ: 8.1 },
+  custom: { label: "Custom width", em: "", occ: null },
+};
+const defaultMode = (spacing) => (spacing <= 6.25 ? "nxdn6" : spacing <= 12.5 ? "fm12" : "fm25");
+const occOf = (mode, spacing) => (MODES[mode]?.occ ?? spacing);
+const stOcc = (s) => (s.mode === "custom" ? +s.customBw || s.tx?.bw || s.rx?.bw : occOf(s.mode || defaultMode(s.tx?.bw ?? s.rx?.bw), s.tx?.bw ?? s.rx?.bw));
+const modeOptions = (sel) => Object.entries(MODES).map(([k, m]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${m.label}${m.em ? " · " + m.em : ""}</option>`).join("");
+
 // ---------------- data ----------------
 let DB = null, BY_NAME = new Map(), SORTED = [];
 async function loadDb() {
@@ -24,7 +41,7 @@ function channelAt(f) {
 }
 function describe(c) {
   const role = { B: "base Tx", M: "mobile Tx", S: "simplex" }[c.role];
-  return `${c.n} · ${fmtF(c.f)} MHz · ${c.bw} kHz ${role} · ${c.band}${c.u ? " · " + c.u : ""}`;
+  return `${c.n} · ${fmtF(c.f)} MHz · ${c.bw} kHz${c.bw <= 6.25 ? " (digital)" : ""} ${role} · ${c.band}${c.u ? " · " + c.u : ""}`;
 }
 
 // ---------------- worker ----------------
@@ -44,13 +61,13 @@ const save = () => { store.set("sites", sites); store.set("current", currentId);
 function stationFromChannel(c) {
   if (c.role === "B") {
     const p = BY_NAME.get((c.p || "").toUpperCase());
-    return { id: uid(), label: c.n, ch: c.n, tx: { f: c.f, bw: c.bw }, rx: p ? { f: p.f, bw: p.bw } : null, txOn: true, rxOn: !!p };
+    return { id: uid(), label: c.n, ch: c.n, tx: { f: c.f, bw: c.bw }, rx: p ? { f: p.f, bw: p.bw } : null, txOn: true, rxOn: !!p, mode: defaultMode(c.bw) };
   }
   if (c.role === "M") {
     const p = BY_NAME.get((c.p || "").toUpperCase());
-    return { id: uid(), label: c.n, ch: c.n, tx: { f: c.f, bw: c.bw }, rx: p ? { f: p.f, bw: p.bw } : null, txOn: true, rxOn: !!p };
+    return { id: uid(), label: c.n, ch: c.n, tx: { f: c.f, bw: c.bw }, rx: p ? { f: p.f, bw: p.bw } : null, txOn: true, rxOn: !!p, mode: defaultMode(c.bw) };
   }
-  return { id: uid(), label: c.n, ch: c.n, tx: { f: c.f, bw: c.bw }, rx: { f: c.f, bw: c.bw }, txOn: true, rxOn: true };
+  return { id: uid(), label: c.n, ch: c.n, tx: { f: c.f, bw: c.bw }, rx: { f: c.f, bw: c.bw }, txOn: true, rxOn: true, mode: defaultMode(c.bw) };
 }
 
 /** Parse "FN123", "152.4875", "152.4875/156.66", "152.4875 156.66 12.5" */
@@ -82,14 +99,20 @@ function renderStations() {
       <div class="freqs">
         ${s.tx ? `<button class="tog ${s.txOn ? "" : "off"}" data-act="tx" title="Click to include/exclude this transmitter">Tx <b>${fmtF(s.tx.f)}</b></button>` : ""}
         ${s.rx ? `<button class="tog ${s.rxOn ? "" : "off"}" data-act="rx" title="Click to include/exclude this receiver">Rx <b>${fmtF(s.rx.f)}</b></button>` : ""}
-        <span>${s.tx?.bw ?? s.rx?.bw} kHz</span>
+      </div>
+      <div class="mode">
+        <select data-field="mode" aria-label="Emission mode">${modeOptions(s.mode || defaultMode(s.tx?.bw ?? s.rx?.bw))}</select>
+        ${s.mode === "custom" ? `<input type="number" step="0.1" min="0.1" data-field="customBw" value="${s.customBw ?? (s.tx?.bw ?? s.rx?.bw)}" aria-label="Occupied bandwidth kHz"><span>kHz</span>` : `<span>${stOcc(s)} kHz wide</span>`}
       </div>
     </div>`).join("");
   renderVictimPicks();
   updateCleanCount();
 }
 function siteForEngine() {
-  return site().stations.map((s) => ({ label: s.label, tx: s.txOn && s.tx ? s.tx : null, rx: s.rxOn && s.rx ? s.rx : null }));
+  return site().stations.map((s) => {
+    const bw = stOcc(s);
+    return { label: s.label, tx: s.txOn && s.tx ? { f: s.tx.f, bw } : null, rx: s.rxOn && s.rx ? { f: s.rx.f, bw } : null };
+  });
 }
 
 $("#stations").addEventListener("click", (e) => {
@@ -102,9 +125,13 @@ $("#stations").addEventListener("click", (e) => {
   save(); renderStations();
 });
 $("#stations").addEventListener("change", (e) => {
-  const inp = e.target.closest("input[data-field]"); if (!inp) return;
+  const inp = e.target.closest("[data-field]"); if (!inp) return;
   const s = site().stations.find((x) => x.id === inp.closest(".st").dataset.id);
-  s.label = inp.value.trim() || s.label; save(); renderVictimPicks();
+  const fld = inp.dataset.field;
+  if (fld === "label") { s.label = inp.value.trim() || s.label; save(); renderVictimPicks(); return; }
+  if (fld === "mode") s.mode = inp.value;
+  if (fld === "customBw") s.customBw = +inp.value;
+  save(); renderStations();
 });
 
 $("#addForm").addEventListener("submit", (e) => {
@@ -114,7 +141,7 @@ $("#addForm").addEventListener("submit", (e) => {
   if (!p) { $("#addHint").textContent = `"${inp.value}" isn't a PIB 23 channel or a frequency.`; return; }
   let s;
   if (p.kind === "channel") s = stationFromChannel(p.c);
-  else s = { id: uid(), label: `${fmtF(p.tx)}${p.rx !== p.tx ? " / " + fmtF(p.rx) : ""}`, tx: { f: p.tx, bw: p.bw }, rx: { f: p.rx, bw: p.bw }, txOn: true, rxOn: true };
+  else s = { id: uid(), label: `${fmtF(p.tx)}${p.rx !== p.tx ? " / " + fmtF(p.rx) : ""}`, tx: { f: p.tx, bw: p.bw }, rx: { f: p.rx, bw: p.bw }, txOn: true, rxOn: true, mode: defaultMode(p.bw) };
   site().stations.push(s); save(); renderStations();
   inp.value = ""; $("#addHint").textContent = p.kind === "channel" ? describe(p.c) : "Added manual entry. Rename it by clicking the label.";
   inp.focus();
@@ -162,9 +189,9 @@ $("#siteMenu").addEventListener("click", async (e) => {
       const c = BY_NAME.get(parts[0].toUpperCase().replace(/\s+/g, ""));
       if (c && parts.length === 1) { site().stations.push(stationFromChannel(c)); continue; }
       const [label, tx, rx, bw] = [parts[0], +parts[1], +(parts[2] || parts[1]), +(parts[3] || 12.5)];
-      if (!isNaN(+label) && parts.length <= 3) { const t = +label, r = +(parts[1] || label), w = +(parts[2] || 12.5); site().stations.push({ id: uid(), label: fmtF(t), tx: { f: t, bw: w }, rx: { f: r, bw: w }, txOn: true, rxOn: true }); continue; }
+      if (!isNaN(+label) && parts.length <= 3) { const t = +label, r = +(parts[1] || label), w = +(parts[2] || 12.5); site().stations.push({ id: uid(), label: fmtF(t), tx: { f: t, bw: w }, rx: { f: r, bw: w }, txOn: true, rxOn: true, mode: defaultMode(w) }); continue; }
       if (isNaN(tx) || tx <= 0) { bad.push(l); continue; }
-      site().stations.push({ id: uid(), label, tx: { f: tx, bw }, rx: { f: rx, bw }, txOn: true, rxOn: true });
+      site().stations.push({ id: uid(), label, tx: { f: tx, bw }, rx: { f: rx, bw }, txOn: true, rxOn: true, mode: defaultMode(bw) });
     }
     if (bad.length) alert("Couldn't read:\n" + bad.join("\n"));
   }
@@ -243,7 +270,7 @@ function renderVictimPicks() {
   const rxs = site().stations.filter((s) => s.rx);
   let el = $("#victimPicks");
   if (!el) { el = document.createElement("div"); el.id = "victimPicks"; el.className = "chips"; el.style.marginTop = "8px"; $("#victimHint").before(el); }
-  el.innerHTML = rxs.length ? rxs.map((s) => `<button class="chip" data-f="${s.rx.f}" data-bw="${s.rx.bw}" data-label="${esc(s.label)}">${esc(s.label)} Rx ${fmtF(s.rx.f)}</button>`).join("") : "";
+  el.innerHTML = rxs.length ? rxs.map((s) => `<button class="chip" data-f="${s.rx.f}" data-bw="${stOcc(s)}" data-label="${esc(s.label)}">${esc(s.label)} Rx ${fmtF(s.rx.f)}</button>`).join("") : "";
 }
 document.addEventListener("click", (e) => {
   const b = e.target.closest("#victimPicks .chip"); if (!b) return;
@@ -252,7 +279,7 @@ document.addEventListener("click", (e) => {
 function getVictim() {
   const inp = $("#victimInput"), p = parseEntry(inp.value);
   if (!p) return null;
-  if (p.kind === "channel") return { f: p.c.f, bw: +$("#victimBw").value || p.c.bw, label: p.c.n, c: p.c };
+  if (p.kind === "channel") return { f: p.c.f, bw: +$("#victimBw").value || occOf(defaultMode(p.c.bw), p.c.bw), label: p.c.n, c: p.c };
   return { f: p.tx, bw: +$("#victimBw").value, label: inp.dataset.label || fmtF(p.tx) + " MHz" };
 }
 function updateVictimHint() {
@@ -266,7 +293,7 @@ function updateVictimHint() {
   }
 }
 $("#victimInput").addEventListener("input", () => { delete $("#victimInput").dataset.label; updateVictimHint(); });
-$("#victimInput").addEventListener("change", () => { const v = getVictim(); if (v?.c) $("#victimBw").value = v.c.bw; updateVictimHint(); });
+$("#victimInput").addEventListener("change", () => { const v = getVictim(); if (v?.c) $("#victimBw").value = occOf(defaultMode(v.c.bw), v.c.bw); updateVictimHint(); });
 
 const selectedBands = new Set(store.get("poolBands", []));
 function renderBandChips() {
@@ -280,7 +307,7 @@ $("#bandChips").addEventListener("click", (e) => {
 });
 function dbPool() {
   const roles = new Set(["B", "S", "M"].filter((r) => $("#role" + r).checked));
-  return DB.channels.filter((c) => selectedBands.has(c.band) && roles.has(c.role)).map((c) => ({ f: c.f, bw: c.bw, label: c.n, src: "db" }));
+  return DB.channels.filter((c) => selectedBands.has(c.band) && roles.has(c.role)).map((c) => ({ f: c.f, bw: occOf(defaultMode(c.bw), c.bw), label: c.n, src: "db" }));
 }
 function updatePoolCount() {
   if (!DB) return;
@@ -295,7 +322,7 @@ $("#runSource").addEventListener("click", (e) => busy(e.currentTarget, async () 
   const v = getVictim();
   if (!v) { out.innerHTML = `<div class="note">Enter the receive frequency that's being interfered with.</div>`; return; }
   let pool = [];
-  if ($("#poolSite").checked) pool.push(...site().stations.filter((s) => s.tx && s.txOn).map((s) => ({ f: s.tx.f, bw: s.tx.bw, label: s.label, src: "site" })));
+  if ($("#poolSite").checked) pool.push(...site().stations.filter((s) => s.tx && s.txOn).map((s) => ({ f: s.tx.f, bw: stOcc(s), label: s.label, src: "site" })));
   if ($("#poolDb").checked) pool.push(...dbPool());
   if (!pool.length) { out.innerHTML = `<div class="note">No candidate transmitters. Add transmitters to the site, or tick "PIB 23 channels" and pick bands.</div>`; return; }
   const requireSrc = $("#poolSite").checked && $("#poolDb").checked && $("#requireSite").checked && pool.some((c) => c.src === "site") ? "site" : null;
@@ -340,7 +367,7 @@ function renderCleanSelects() {
 }
 function renderPlans(sel) {
   const plans = plansFor($("#cleanBand").value);
-  $("#cleanPlan").innerHTML = plans.map((p) => `<option value="${p.key}" ${p.key === sel ? "selected" : ""}>${p.bw} kHz ${p.kind === "pair" ? "two-frequency" : "simplex"} (§${p.sec}, ${p.n})</option>`).join("");
+  $("#cleanPlan").innerHTML = plans.map((p) => `<option value="${p.key}" ${p.key === sel ? "selected" : ""}>${p.bw} kHz${p.bw <= 6.25 ? " digital" : ""} ${p.kind === "pair" ? "two-frequency" : "simplex"} (§${p.sec}, ${p.n})</option>`).join("");
   updateCleanCount();
 }
 $("#cleanBand").addEventListener("change", () => { renderPlans(); store.set("clean", { band: $("#cleanBand").value, plan: $("#cleanPlan").value }); });
@@ -353,7 +380,7 @@ function candidates() {
   const band = $("#cleanBand").value;
   return DB.channels.filter((c) => c.band === band && c.sec === sec && c.bw === +bw && (kind === "pair" ? c.role === "B" : c.role === "S"))
     .filter((c) => !$("#cleanSkipUsed").checked || !used.has(c.n))
-    .map((c) => { const s = stationFromChannel(c); return { label: c.n, tx: s.tx, rx: s.rx || s.tx, use: c.u }; });
+    .map((c) => { const s = stationFromChannel(c); const bw = stOcc(s); return { label: c.n, tx: { f: s.tx.f, bw }, rx: { f: (s.rx || s.tx).f, bw }, use: c.u }; });
 }
 function updateCleanCount() { if (DB) $("#cleanCount").textContent = `${candidates().length.toLocaleString()} candidate channels, checked against ${site().stations.length} site entries.`; }
 
